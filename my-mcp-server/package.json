@@ -9,7 +9,9 @@
 		"lint:fix": "biome lint --fix",
 		"start": "wrangler dev",
 		"cf-typegen": "wrangler types",
-		"type-check": "tsc --noEmit"
+		"type-check": "tsc --noEmit",
+		"test": "vitest run",
+		"test:watch": "vitest"
 	},
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "^1.11.4",
@@ -19,6 +21,8 @@
 	"devDependencies": {
 		"@biomejs/biome": "^1.9.4",
 		"typescript": "^5.8.3",
-		"wrangler": "^4.16.0"
+		"wrangler": "^4.16.0",
+		"vitest": "^1.6.0",
+		"msw": "^2.3.0"
 	}
 }

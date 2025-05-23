@@ -1,150 +1,174 @@
-# Placeholder for Attio API key
-ATTIO_API_KEY = "YOUR_API_KEY_HERE"
-
 # Import requests library
 import requests
+import os
+from flask import Flask, request, jsonify
 
 # Base URL for Attio API
 ATTIO_API_BASE_URL = "https://api.attio.com/v2"
 
-# Function to list attributes (to be added later)
+app = Flask(__name__)
 
-def get_object_definition(object_slug):
+def get_object_definition_impl(api_key, object_slug):
     """
     Fetches the attribute definitions for a given object slug from the Attio API.
-
-    Args:
-        object_slug (str): The slug of the object (e.g., "companies", "people").
-
-    Returns:
-        list: A list of attribute definitions if successful, None otherwise.
-              The API key 'ATTIO_API_KEY' needs to be replaced with a real key.
+    Implementation function.
     """
-    if ATTIO_API_KEY == "YOUR_API_KEY_HERE":
-        print("Error: Please replace 'YOUR_API_KEY_HERE' with your actual Attio API key.")
-        return None
+    if not api_key:
+        return {"error": "API key is required."}, 400
 
     url = f"{ATTIO_API_BASE_URL}/objects/{object_slug}/attributes"
     headers = {
-        "Authorization": f"Bearer {ATTIO_API_KEY}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
 
     try:
         response = requests.get(url, headers=headers)
-        if response.status_code == 200:
-            return response.json().get("data")
-        else:
-            print(f"Error fetching object definition for '{object_slug}':")
-            print(f"Status Code: {response.status_code}")
-            print(f"Response: {response.text}")
-            return None
+        response.raise_for_status()  # Raises an HTTPError for bad responses (4XX or 5XX)
+        return response.json().get("data"), 200
+    except requests.exceptions.HTTPError as http_err:
+        return {
+            "error": f"HTTP error fetching object definition for '{object_slug}'",
+            "status_code": response.status_code,
+            "details": response.text
+        }, response.status_code
     except requests.exceptions.RequestException as e:
-        print(f"An error occurred during the API request: {e}")
-        return None
+        return {"error": f"Request exception: {e}"}, 500
+    except Exception as e:
+        return {"error": f"An unexpected error occurred: {e}"}, 500
 
-def assert_deal(deal_attributes, matching_attribute):
+
+@app.route("/get_object_definition", methods=["POST"])
+def get_object_definition_route():
+    data = request.get_json()
+    api_key = data.get("attio_api_key")
+    object_slug = data.get("object_slug")
+
+    if not object_slug:
+        return jsonify({"error": "object_slug is required."}), 400
+    
+    result, status_code = get_object_definition_impl(api_key, object_slug)
+    return jsonify(result), status_code
+
+
+def assert_deal_impl(api_key, deal_attributes, matching_attribute):
     """
-    Asserts a deal record in Attio. This means it creates a new deal or updates
-    an existing one if a deal with a matching value for the `matching_attribute`
-    is found.
-
-    Args:
-        deal_attributes (dict): A dictionary where keys are attribute slugs and
-                                values are the corresponding values for the deal.
-        matching_attribute (str): The slug of the attribute to use for matching
-                                  existing deals (e.g., "name", "deal_id").
-
-    Returns:
-        dict: The data of the created or updated deal record if successful, None otherwise.
-              The API key 'ATTIO_API_KEY' needs to be replaced with a real key.
+    Asserts a deal record in Attio.
+    Implementation function.
     """
-    if ATTIO_API_KEY == "YOUR_API_KEY_HERE":
-        print("Error: Please replace 'YOUR_API_KEY_HERE' with your actual Attio API key.")
-        return None
+    if not api_key:
+        return {"error": "API key is required."}, 400
 
     object_slug = "deals"
     url = f"{ATTIO_API_BASE_URL}/objects/{object_slug}/records"
     
     params = {"matching_attribute": matching_attribute}
-    
     json_payload = {"data": {"values": deal_attributes}}
     
     headers = {
-        "Authorization": f"Bearer {ATTIO_API_KEY}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
 
     try:
         response = requests.put(url, headers=headers, params=params, json=json_payload)
-        if response.status_code == 200:
-            return response.json().get("data")
-        else:
-            print(f"Error asserting deal:")
-            print(f"Status Code: {response.status_code}")
-            print(f"Response: {response.text}")
-            return None
+        response.raise_for_status() # Raises an HTTPError for bad responses (4XX or 5XX)
+        return response.json().get("data"), 200
+    except requests.exceptions.HTTPError as http_err:
+        return {
+            "error": f"HTTP error asserting deal",
+            "status_code": response.status_code,
+            "details": response.text
+        }, response.status_code
     except requests.exceptions.RequestException as e:
-        print(f"An error occurred during the API request: {e}")
-        return None
+        return {"error": f"Request exception: {e}"}, 500
+    except Exception as e:
+        return {"error": f"An unexpected error occurred: {e}"}, 500
+
+@app.route("/assert_deal", methods=["POST"])
+def assert_deal_route():
+    data = request.get_json()
+    api_key = data.get("attio_api_key")
+    deal_attributes = data.get("deal_attributes")
+    matching_attribute = data.get("matching_attribute")
+
+    if not deal_attributes or not matching_attribute:
+        return jsonify({"error": "deal_attributes and matching_attribute are required."}), 400
+    
+    result, status_code = assert_deal_impl(api_key, deal_attributes, matching_attribute)
+    return jsonify(result), status_code
+
 
 if __name__ == "__main__":
-    # IMPORTANT: Replace "YOUR_API_KEY_HERE" at the top of this file with your actual Attio API key.
+    # It's recommended to get the API key from an environment variable for security
+    # For local testing, you can still set it here if you prefer, but environment variables are better.
+    ATTIO_API_KEY_FROM_ENV = os.environ.get("ATTIO_API_KEY")
+
+    if not ATTIO_API_KEY_FROM_ENV:
+        print("Warning: ATTIO_API_KEY environment variable not set.")
+        print("The Flask app will run, but API calls will fail without an API key provided in requests.")
+
+    print("Starting Flask server for Attio tools on port 5003 (default for Flask in dev).")
+    print("Endpoints available:")
+    print("  POST /get_object_definition Body: {\"attio_api_key\": \"<key>\", \"object_slug\": \"<slug>\"}")
+    print("  POST /assert_deal Body: {\"attio_api_key\": \"<key>\", \"deal_attributes\": {...}, \"matching_attribute\": \"<attr_slug>\"}")
     
-    # Example 1: Get object definition for "deals"
-    # This helps you understand the available attributes and their slugs for deals.
-    # Make sure your ATTIO_API_KEY is set before uncommenting and running this.
-    # print("\nFetching deal object definition...")
-    # if ATTIO_API_KEY != "YOUR_API_KEY_HERE":
-    #     deal_attributes_info = get_object_definition("deals")
-    #     if deal_attributes_info:
-    #         print("Deal Attributes:")
-    #         for attr in deal_attributes_info:
+    # Example usage (these would now be called via HTTP POST requests to the server)
+    # To test these functions, you would use a tool like curl or Postman to send POST requests
+    # to the running Flask application.
+
+    # Example 1: How to conceptualize testing get_object_definition
+    # You would send a POST to http://localhost:5003/get_object_definition with JSON body:
+    # {
+    #   "attio_api_key": "YOUR_ACTUAL_API_KEY",
+    #   "object_slug": "deals"
+    # }
+    # if ATTIO_API_KEY_FROM_ENV:
+    #     print("\nTesting get_object_definition_impl (simulated)...")
+    #     deal_attrs_info, status = get_object_definition_impl(ATTIO_API_KEY_FROM_ENV, "deals")
+    #     if status == 200:
+    #         print("Deal Attributes Info:")
+    #         for attr in deal_attrs_info:
     #             print(f"  - Slug: {attr.get('api_slug')}, Title: {attr.get('title')}, Type: {attr.get('type')}")
     #     else:
-    #         print("Could not fetch deal attributes. Ensure API key is correct and you have internet access.")
+    #         print(f"Error in get_object_definition_impl: {deal_attrs_info}")
     # else:
-    #     print("Skipping get_object_definition example as API key is not set.")
+    #     print("\nSkipping get_object_definition_impl test as API key from env is not set.")
 
-    print("\nExample: Asserting a deal")
-    print("-------------------------")
-    print("Note: The attribute slugs ('name', 'deal_value', 'deal_stage') used below are examples.")
-    print("Use get_object_definition('deals') (example above, requires API key) to find the correct slugs for your Attio workspace.")
+    # Example 2: How to conceptualize testing assert_deal
+    # You would send a POST to http://localhost:5003/assert_deal with JSON body:
+    # {
+    #   "attio_api_key": "YOUR_ACTUAL_API_KEY",
+    #   "deal_attributes": {
+    #     "name": "Big Corp Q4 Contract from Flask",
+    #     "deal_value": 75000,
+    #     "deal_stage": "Negotiation"
+    #   },
+    #   "matching_attribute": "name"
+    # }
+    # if ATTIO_API_KEY_FROM_ENV:
+    #     print("\nTesting assert_deal_impl (simulated)...")
+    #     example_deal_attributes = {
+    #         "name": "New Test Deal via Flask Impl",
+    #         "deal_value": 12345,
+    #         "deal_stage": "Initial Contact"
+    #     }
+    #     matching_attribute_slug = "name"
+    #     created_deal, status = assert_deal_impl(ATTIO_API_KEY_FROM_ENV, example_deal_attributes, matching_attribute_slug)
+    #     if status == 200:
+    #         print("\nAssert deal (impl) successful!")
+    #         try:
+    #             import json
+    #             print(json.dumps(created_deal, indent=2))
+    #         except ImportError:
+    #             print(created_deal)
+    #     else:
+    #         print(f"\nAssert deal (impl) failed: {created_deal}")
+    # else:
+    #     print("\nSkipping assert_deal_impl test as API key from env is not set.")
 
-    if ATTIO_API_KEY == "YOUR_API_KEY_HERE":
-        print("\nPlease set your ATTIO_API_KEY at the top of the file to run the assert_deal example.")
-    else:
-        # Example deal attributes. Adjust slugs and values based on your Attio setup.
-        # Common attribute slugs might be 'name', 'deal-value', 'status' or 'deal-stage'.
-        # Verify these against your Attio workspace's "deals" object attributes by uncommenting Example 1.
-        example_deal_attributes = {
-            "name": "Big Corp Q4 Contract",      # Example: Name of the deal (usually a text attribute)
-            "deal_value": 50000,                 # Example: Monetary value of the deal (currency or number attribute)
-            "deal_stage": "Proposal Sent"        # Example: Current stage of the deal (likely a select attribute)
-        }
-        
-        # The attribute slug to use for matching. If a deal with this 'name' exists, it will be updated.
-        # Otherwise, a new deal will be created.
-        # This should be an attribute that uniquely identifies a deal, or one you want to use for upserting.
-        # 'name' is used here as an example.
-        matching_attribute_slug = "name" 
-
-        print(f"\nAttempting to assert deal with attributes: {example_deal_attributes}")
-        print(f"Matching based on attribute: '{matching_attribute_slug}'")
-        
-        created_or_updated_deal = assert_deal(example_deal_attributes, matching_attribute_slug)
-
-        if created_or_updated_deal:
-            print("\nAssert deal successful!")
-            print("Response data:")
-            # Pretty print the JSON response if possible, otherwise just print the dict
-            try:
-                import json
-                print(json.dumps(created_or_updated_deal, indent=2))
-            except ImportError:
-                print(created_or_updated_deal)
-            except Exception as e: # Catching a broader exception for json.dumps if it fails for other reasons
-                print(f"Could not pretty print JSON response: {e}")
-                print(created_or_updated_deal)
-        else:
-            print("\nAssert deal failed. Check previous error messages in the console.")
+    # Run the Flask app.
+    # Consider using a more production-ready WSGI server like gunicorn if this were for production.
+    # For development, Flask's built-in server is fine.
+    # Changing port to 5003 to avoid potential conflicts with other services.
+    app.run(host="0.0.0.0", port=5003, debug=True)
